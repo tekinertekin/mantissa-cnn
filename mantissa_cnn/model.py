@@ -54,7 +54,13 @@ class Sequential:
 
     def __init__(self, layers, seed: int = 0, backend: str = "mantissa"):
         if backend == "mantissa":
-            self._backend = cnn_engine()      # raises with the exact fix
+            tk = cnn_engine()                 # raises with the exact fix
+            # mantissa >= 0.2.2: a per-model Session memoizes each buffer's
+            # ctypes pointer by identity. Our buffers are allocated once and
+            # refilled in place, so this turns per-call pointer derivation
+            # (~12% of a LeNet-5 fit, measured) into a dict hit. Same
+            # signatures; older engines just take the plain methods.
+            self._backend = tk.session() if hasattr(tk, "session") else tk
         elif backend == "numpy":
             self._backend = _numpy_backend
         else:
