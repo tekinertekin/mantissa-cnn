@@ -120,8 +120,7 @@ def _load_idx_pair(images_path: Path, labels_path: Path):
         y = y[:, 0]
     if len(y) != len(X):
         raise ValueError(f"{labels_path}: {len(y)} labels for {len(X)} images")
-    Xf = (X.astype(np.float32) / 255.0).reshape(-1, 1, 28, 28)
-    return np.ascontiguousarray(Xf), y.astype(np.int32)
+    return X.reshape(-1, 1, 28, 28), y.astype(np.int32)
 
 
 def _load_cifar10(tar_path: Path):
@@ -137,22 +136,52 @@ def _load_cifar10(tar_path: Path):
                     raise ValueError(f"{tar_path}:{member}: bad batch shape {data.shape}")
                 xs.append(data)
                 ys.extend(labels)
-        X = np.concatenate(xs).reshape(-1, 3, 32, 32).astype(np.float32) / 255.0
-        return np.ascontiguousarray(X), np.asarray(ys, dtype=np.int32)
+        X = np.concatenate(xs).reshape(-1, 3, 32, 32)
+        return X, np.asarray(ys, dtype=np.int32)
 
     Xtr, ytr = batches([f"data_batch_{i}" for i in range(1, 6)])
     Xte, yte = batches(["test_batch"])
     return Xtr, ytr, Xte, yte
 
 
+def _to_f01(X):
+    """uint8 [0,255] NCHW -> C-contiguous float32 [0,1]."""
+    return np.ascontiguousarray(X.astype(np.float32) / 255.0)
+
+
 # -- public API ---------------------------------------------------------------
 
 def load(name: str):
-    """Load dataset ``name`` -> (X_train, y_train, X_test, y_test).
+    """Load dataset ``name`` -> (X_train, y_train, X_test, y_test) as NCHW
+    float32 in [0, 1], int32 labels.
 
     Never downloads: raises FileNotFoundError with the exact fix command if
-    any file is missing.
+    any file is missing. For a benchmark-sized slice prefer subset(), which
+    converts only the slice to float32 (4x lower peak RAM on the full set).
     """
+    if name not in DATASETS:
+        raise KeyError(f"unknown dataset {name!r}; available: {', '.join(DATASETS)}")
+    spec = DATASETS[name]
+    d = data_dir() / name
+    paths = [d / f for f in spec.files]
+    if not all(p.is_file() for p in paths):
+        raise FileNotFoundError(
+            f"dataset {name!r} not downloaded — run: {download_command(name)}")
+    if name == "cifar10":
+        Xtr, ytr, Xte, yte = _load_cifar10(paths[0])
+    else:
+        Xtr, ytr = _load_idx_pair(paths[0], paths[1])
+        Xte, yte = _load_idx_pair(paths[2], paths[3])
+    return _to_f01(Xtr), ytr, _to_f01(Xte), yte
+
+
+def _load_u8(name: str):
+    """load() without the float conversion: uint8 NCHW, int32 labels.
+
+    Internal. subset() slices these and converts only the slice, so peak RAM
+    is the raw bytes plus the subset — not a float32 copy of the full set
+    (4x the bytes; measured 1.26 GB peak RSS on the cifar10 benchmark worker
+    before this split, dataset load dominating every contender's number)."""
     if name not in DATASETS:
         raise KeyError(f"unknown dataset {name!r}; available: {', '.join(DATASETS)}")
     spec = DATASETS[name]
@@ -173,13 +202,14 @@ def subset(name: str, n_train: int, n_test: int, seed: int = 0):
 
     Per-class quotas are as equal as the class counts allow (largest-
     remainder split of n over the classes present). The benchmark protocol
-    uses subset("...", 2000, 1000, seed=0).
-    """
-    Xtr, ytr, Xte, yte = load(name)
+    uses subset("...", 2000, 1000, seed=0). Slices the raw uint8 arrays and
+    converts only the slice to float32 — same values as slicing load()'s
+    output, at a fraction of the peak RAM (see _load_u8)."""
+    Xtr, ytr, Xte, yte = _load_u8(name)
     itr = _stratified_indices(ytr, n_train, np.random.default_rng(seed))
     ite = _stratified_indices(yte, n_test, np.random.default_rng(seed + 1))
-    return (np.ascontiguousarray(Xtr[itr]), ytr[itr],
-            np.ascontiguousarray(Xte[ite]), yte[ite])
+    return (_to_f01(Xtr[itr]), ytr[itr],
+            _to_f01(Xte[ite]), yte[ite])
 
 
 def _stratified_indices(y, n, rng):
