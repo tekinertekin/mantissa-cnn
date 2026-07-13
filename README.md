@@ -75,6 +75,30 @@ the ImageNet originals.
 | `minivgg` | [32, 32, pool] → [64, 64, pool] → 128 → classes, all 3x3 pad-1 — VGG-style blocks at CIFAR scale, **not** VGG-16 | Simonyan & Zisserman (2015), "Very Deep Convolutional Networks for Large-Scale Image Recognition", *ICLR* |
 | `alexnet_small` | 64 → pool → 192 → pool → 384 → 256 → 256 → pool → 1024 → 512 → classes, 3x3 kernels — AlexNet-style at CIFAR scale, **not** the ImageNet net | Krizhevsky, Sutskever & Hinton (2012), "ImageNet Classification with Deep Convolutional Neural Networks", *NeurIPS* |
 
+### The originals, for reference
+
+What the papers built (our zoo keeps the layer *pattern* and shrinks the
+scale — see the honest-name notes above):
+
+**LeNet-5** (LeCun et al., 1998) — `lenet5` keeps these exact C1..F6 shapes:
+
+![LeNet-5 architecture](assets/arch/lenet5.svg)
+
+**AlexNet** (Krizhevsky et al., 2012) vs LeNet — `alexnet_small` keeps the
+conv-conv-conv stack and the big dense head, at 32×32:
+
+![AlexNet architecture](assets/arch/alexnet.svg)
+
+**VGG** (Simonyan & Zisserman, 2015) — `minivgg` keeps the same-width 3×3
+conv *blocks* with pooling between, two blocks instead of five:
+
+![VGG block architecture](assets/arch/vgg.svg)
+
+<sub>Diagrams by Zhang, Lipton, Li & Smola, [*Dive into Deep Learning*](https://d2l.ai)
+(LeNet-5 and AlexNet via Wikimedia Commons), licensed
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) — redistributed
+here with attribution, unmodified.</sub>
+
 ## Datasets
 
 Five image-classification classics, all 10-class. **Nothing downloads
