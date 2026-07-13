@@ -5,7 +5,6 @@ Figures (matplotlib, no seaborn, one chart per file):
   assets/fit_time.png   median fit seconds per (arch, dataset), grouped bars
                         per contender, log scale — one row per architecture
   assets/accuracy.png   test accuracy per (arch, dataset) per contender,
-                        sklearn bar hatched + labeled "non-CNN baseline"
   assets/peak_rss.png   peak RSS per contender (import + fit), grouped bars
                         for the two representative pairs
 
@@ -35,19 +34,17 @@ ASSETS = REPO_ROOT / "assets"
 # orange match the perceptron benchmark plots.
 COLORS = {
     "ours": "#2a78d6",         # blue
-    "ours_numpy": "#1baf7a",   # aqua
+    "vanilla_numpy": "#1baf7a",  # aqua
     "torch": "#e34948",        # red
     "tensorflow": "#d96b2f",   # orange
-    "sklearn": "#eda100",      # yellow
 }
 LABELS = {
     "ours": "ours (C engine)",
-    "ours_numpy": "ours (numpy)",
+    "vanilla_numpy": "vanilla numpy",
     "torch": "torch",
     "tensorflow": "tensorflow",
-    "sklearn": "sklearn MLP (non-CNN)",
 }
-ORDER = ["ours", "ours_numpy", "torch", "tensorflow", "sklearn"]
+ORDER = ["ours", "vanilla_numpy", "torch", "tensorflow"]
 
 # Opaque light surface so the PNG reads on GitHub light AND dark themes.
 SURFACE = "#fcfcfb"
@@ -106,7 +103,7 @@ def _grouped_bars(ax, contenders, datasets, values, log=False, fmt="{:.2f}"):
         offset = (si - (n_series - 1) / 2) * width
         bars = ax.bar(x + offset, heights, width, label=LABELS[c],
                       color=COLORS[c], edgecolor=SURFACE, linewidth=0.8,
-                      hatch="//" if c == "sklearn" else None, zorder=3)
+                      zorder=3)
         for rect, h in zip(bars, heights):
             if h <= 0:
                 continue

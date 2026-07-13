@@ -4,9 +4,9 @@ module reports test accuracy instead of time.
 
 For every (architecture, dataset, contender): fit on the train subset,
 report train and test accuracy plus the final training loss. Contenders and
-fairness rules are speed.py's; sklearn's MLPClassifier on flattened pixels
-stays explicitly labeled as the non-CNN baseline. No number goes in the
-README that this script did not produce.
+fairness rules are speed.py's (scikit-learn is absent by design — it has no
+convolutional layers). No number goes in the README that this script did
+not produce.
 
 Output: bench/results/accuracy.json
   {"env": {...}, "protocol": {...},

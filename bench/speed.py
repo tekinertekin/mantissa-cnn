@@ -18,13 +18,16 @@ Protocol (fixed; do not tune per contender):
 
 Contenders:
   ours        mantissa_cnn (backend="mantissa"; the C engine)
-  ours_numpy  mantissa_cnn (backend="numpy"; the reference backend)
+  vanilla_numpy  mantissa_cnn's pure-numpy reference backend — vectorized
+              im2col, NO mantissa engine involved; the "what plain numpy
+              buys you" baseline
   torch       torch.nn.Sequential with the same layers/init family, SGD
   tensorflow  tf.keras.Sequential, same layers, SGD (compile once; exclude
               tracing from timing, as with any one-time JIT)
-  sklearn     MLPClassifier on FLATTENED pixels — sklearn cannot express a
-              CNN; this is an explicitly-labeled non-CNN baseline, present
-              to show what giving up convolutions costs, not as a rival.
+  (scikit-learn is deliberately absent: it offers no convolutional
+  layers, so it cannot run this benchmark's architectures. An MLP on
+  flattened pixels was measured and removed — an apples-to-oranges row
+  has no place in a CNN comparison.)
 
 Fairness: identical epochs/batch/lr/seed everywhere the API allows; record
 library versions, CPU and thread settings in the JSON. Measure, don't assume.
@@ -59,7 +62,7 @@ import numpy as np
 
 # numpy 2.x on Apple Accelerate emits spurious FPE RuntimeWarnings from the
 # BLAS matmul kernel even on finite inputs (verified: contender weights stay
-# bounded). They fire from both our numpy backend and sklearn's internals.
+# bounded). They fire from the vanilla-numpy backend's matmuls.
 warnings.filterwarnings("ignore", message=".*encountered in matmul",
                         category=RuntimeWarning)
 
@@ -74,7 +77,7 @@ LR = 0.01
 SEED = 0
 REPEATS = 5
 PREDICT_CALLS = 20
-CONTENDERS = ("ours", "ours_numpy", "torch", "tensorflow", "sklearn")
+CONTENDERS = ("ours", "vanilla_numpy", "torch", "tensorflow")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_PATH = REPO_ROOT / "bench" / "results" / "speed.json"
@@ -239,34 +242,6 @@ class _KerasCNN:
         return self._m.predict(X, verbose=0).argmax(1)
 
 
-# The MLP hidden sizes mirror each architecture's dense head (lenet5:
-# 120 -> 84, minivgg: 128) — the closest model sklearn can express; it sees
-# flattened pixels because it has no convolutions. Non-CNN baseline.
-_SK_HIDDEN = {"lenet5": (120, 84), "minivgg": (128,)}
-
-
-class _SkMLP:
-    def __init__(self, arch, in_shape):
-        from sklearn.neural_network import MLPClassifier
-        self._clf = MLPClassifier(
-            hidden_layer_sizes=_SK_HIDDEN[arch], solver="sgd",
-            learning_rate_init=LR, batch_size=BATCH_SIZE, max_iter=EPOCHS,
-            momentum=0.0, nesterovs_momentum=False, shuffle=True,
-            random_state=SEED)
-
-    def fit(self, X, y):
-        from sklearn.exceptions import ConvergenceWarning
-        with warnings.catch_warnings():
-            # max_iter=EPOCHS is the protocol's budget, not a convergence bug.
-            warnings.simplefilter("ignore", ConvergenceWarning)
-            self._clf.fit(X, y)
-        self.final_loss_ = float(self._clf.loss_curve_[-1])
-        return self
-
-    def predict(self, X):
-        return self._clf.predict(X)
-
-
 # --- contender registry ------------------------------------------------------
 # (name, factory, prep). prep maps the numpy NCHW subset into the contender's
 # native form ONCE, outside the timed region, so fit() measures training only.
@@ -285,17 +260,12 @@ def _prep_tf(X, y):
     return np.ascontiguousarray(X.transpose(0, 2, 3, 1)), y   # NHWC
 
 
-def _prep_sk(X, y):
-    return X.reshape(len(X), -1), y   # flattened pixels (non-CNN baseline)
-
-
 def _contenders():
     reg = [
         ("ours", lambda a, s: _OursCNN(a, s, "mantissa"), _prep_ours),
-        ("ours_numpy", lambda a, s: _OursCNN(a, s, "numpy"), _prep_ours),
+        ("vanilla_numpy", lambda a, s: _OursCNN(a, s, "numpy"), _prep_ours),
         ("torch", _TorchCNN, _prep_torch),
         ("tensorflow", _KerasCNN, _prep_tf),
-        ("sklearn", _SkMLP, _prep_sk),
     ]
     assert tuple(n for n, *_ in reg) == CONTENDERS
     return reg
@@ -432,8 +402,6 @@ def _env_block() -> dict:
                                            f"default({os.cpu_count()})"),
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
     }
-    import sklearn
-    env["sklearn"] = sklearn.__version__
     import torch
     env["torch"] = torch.__version__
     env["torch_threads"] = torch.get_num_threads()
