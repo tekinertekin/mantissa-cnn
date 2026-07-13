@@ -64,6 +64,50 @@ net = Sequential([
 ], seed=0)
 ```
 
+## New to CNNs? The three ideas in this package
+
+**Convolutional layer.** Instead of connecting every pixel to every neuron
+(a dense layer), a convolutional layer slides a small learned filter — say
+5×5 numbers — across the image and, at each position, multiplies and sums
+the overlapping values into one output cell. The same filter is reused at
+every position, so the layer learns *local* patterns (an edge, a corner, a
+stroke) wherever they appear, with a few dozen weights instead of millions
+(LeCun, Bottou, Bengio & Haffner, 1998, "Gradient-Based Learning Applied to
+Document Recognition", *Proc. IEEE*; the mechanism dates to Fukushima's
+neocognitron, 1980). One layer learns many filters; each produces its own
+output map ("channel"):
+
+<img src="assets/concepts/correlation.svg" width="340" alt="a 2x2 kernel sliding over a 3x3 input producing a 2x2 output">
+
+**Padding.** Each pass of a filter shrinks the image (a 5×5 filter turns
+28×28 into 24×24) and reads border pixels fewer times than central ones.
+Padding fixes both: rows and columns of zeros around the input let the
+filter's center reach the true edges, so the output keeps the input's size
+(`pad=1` with 3×3 filters — the VGG recipe) and border information
+survives deep stacks. The full input/output-size arithmetic is worked out
+in Dumoulin & Visin (2016), "A guide to convolution arithmetic for deep
+learning", arXiv:1603.07285:
+
+<img src="assets/concepts/conv-pad.svg" width="340" alt="zero padding around an input before convolving">
+
+**Max pooling.** Between convolutions, a pooling layer slides a small
+window (here 2×2) and keeps only the largest value in it — the image
+halves in width and height, the strongest responses survive, and the exact
+pixel position of a feature stops mattering (a slightly shifted "7" is
+still a "7"). Max beats average pooling for recognition in the systematic
+comparison of Scherer, Müller & Behnke (2010, "Evaluation of Pooling
+Operations in Convolutional Architectures for Object Recognition",
+*ICANN*):
+
+<img src="assets/concepts/pooling.svg" width="300" alt="2x2 max pooling keeping the largest value per window">
+
+Stack these — convolve, pool, convolve, pool, then a couple of dense
+layers — and you have every model in the zoo below.
+
+<sub>Concept diagrams by Zhang, Lipton, Li & Smola, [*Dive into Deep
+Learning*](https://d2l.ai), CC BY-SA 4.0, unmodified — the same source and
+license as the architecture diagrams below.</sub>
+
 ## Model zoo
 
 Honest names: these are the classic architectures at small-image scale, not
@@ -112,6 +156,15 @@ network; missing files raise with the exact fix command.
 | kmnist | 60k / 10k | 1×28×28 | Clanuwat et al. (2018) |
 | qmnist | 60k / 60k | 1×28×28 | Yadav & Bottou (2019) |
 | cifar10 | 50k / 10k | 3×32×32 | Krizhevsky (2009) |
+
+One test sample from each, with a LeNet-5's output under it (3-epoch
+protocol budget; correctly-classified examples — the *measured* accuracy
+per dataset is in [Results](#results)):
+
+| mnist | fashion_mnist | kmnist | cifar10 | qmnist |
+|:-----:|:-------------:|:------:|:-------:|:------:|
+| ![mnist sample](assets/samples/mnist.png) | ![fashion sample](assets/samples/fashion_mnist.png) | ![kmnist sample](assets/samples/kmnist.png) | ![cifar10 sample](assets/samples/cifar10.png) | ![qmnist sample](assets/samples/qmnist.png) |
+| → “4” | → “t-shirt” | → “na” (な) | → “airplane” | → “2” |
 
 `datasets.load(name)` → `(X_train, y_train, X_test, y_test)`, NCHW float32
 in [0, 1], int32 labels. `datasets.subset(name, n_train, n_test, seed)`
