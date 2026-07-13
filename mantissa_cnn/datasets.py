@@ -198,6 +198,15 @@ def _stratified_indices(y, n, rng):
 # -- explicit downloader (the only networking code) ----------------------------
 
 def download(name: str) -> None:
+    """Fetch every file of dataset ``name``, verified and atomic.
+
+    The payload is checked before it can ever reach the load path: length
+    against the server's Content-Length and the gzip magic (every dataset
+    file, including CIFAR's .tar.gz, is gzip) — a truncated body or an HTML
+    error page raises OSError instead of landing on disk. The verified body
+    is written to a ``.part`` file and renamed into place, so ``load()``
+    never sees a partial download.
+    """
     spec = DATASETS[name]
     d = data_dir() / name
     d.mkdir(parents=True, exist_ok=True)
@@ -209,8 +218,17 @@ def download(name: str) -> None:
         url = spec.base_url + fname
         print(f"{name}: {url}\n  -> {path}")
         with urllib.request.urlopen(url, timeout=60) as r:
+            length = r.headers.get("Content-Length")
             body = r.read()
-        path.write_bytes(body)
+        if length is not None and len(body) != int(length):
+            raise OSError(f"{url}: truncated — got {len(body):,} of "
+                          f"{int(length):,} announced bytes")
+        if not body.startswith(b"\x1f\x8b"):
+            raise OSError(f"{url}: not gzip data (starts {body[:4]!r}) — "
+                          f"an error page or proxy response, not the dataset")
+        tmp = path.with_name(fname + ".part")
+        tmp.write_bytes(body)
+        tmp.replace(path)
         print(f"  done ({len(body):,} bytes)")
 
 
@@ -223,12 +241,20 @@ def _main(argv) -> int:
         return 0
     if len(argv) == 2 and argv[0] == "download":
         names = list(DATASETS) if argv[1] == "all" else [argv[1]]
+        failed = []
         for name in names:
             if name not in DATASETS:
                 print(f"unknown dataset {name!r}; available: {', '.join(DATASETS)}",
                       file=sys.stderr)
                 return 2
-            download(name)
+            try:
+                download(name)
+            except Exception as exc:            # keep fetching the rest
+                print(f"{name}: FAILED — {exc}", file=sys.stderr)
+                failed.append(name)
+        if failed:
+            print(f"download failed for: {', '.join(failed)}", file=sys.stderr)
+            return 1
         return 0
     print("usage: python -m mantissa_cnn.datasets download <name|all>\n"
           "       python -m mantissa_cnn.datasets list", file=sys.stderr)
