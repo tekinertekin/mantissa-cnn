@@ -187,19 +187,19 @@ convolutional layers, so it cannot run these architectures.
 
 | contender | fit (s) ↓ | predict (ms) ↓ | peak RSS (MB) ↓ | test acc |
 |-----------|----------:|---------------:|----------------:|---------:|
-| **ours (mantissa)** | **0.317** | **10.2** | **165** | 0.782 |
-| tensorflow | 0.741 | 69.4 | 496 | 0.846 |
-| torch | 0.882 | 22.8 | 340 | 0.762 |
-| vanilla numpy | 0.795 | 53.5 | 177 | 0.782 |
+| **ours (mantissa)** | **0.228** | **8.1** | **165** | 0.782 |
+| tensorflow | 0.458 | 42.1 | 619 | 0.846 |
+| torch | 0.519 | 13.4 | 372 | 0.762 |
+| vanilla numpy | 0.575 | 40.0 | 171 | 0.782 |
 
 **Mini-VGG on CIFAR-10** (32×32 RGB — the heavy, 3×3-block workload):
 
 | contender | fit (s) ↓ | predict (ms) ↓ | peak RSS (MB) ↓ | test acc |
 |-----------|----------:|---------------:|----------------:|---------:|
-| tensorflow | **3.102** | **160.4** | 923 | 0.187 |
-| **ours (mantissa)** | 3.351 | 165.9 | **491** | 0.292 |
-| torch | 7.163 | 266.1 | 658 | 0.288 |
-| vanilla numpy | 9.524 | 595.5 | 574 | 0.294 |
+| tensorflow | **3.027** | **165.6** | 922 | 0.187 |
+| **ours (mantissa)** | 3.182 | 175.2 | **490** | 0.292 |
+| torch | 6.789 | 256.6 | 655 | 0.288 |
+| vanilla numpy | 9.696 | 608.5 | 572 | 0.294 |
 
 ![median fit time per architecture/dataset per contender](assets/fit_time.png)
 ![test accuracy per architecture/dataset](assets/accuracy.png)
@@ -207,18 +207,22 @@ convolutional layers, so it cannot run these architectures.
 
 **The honest read.**
 - **LeNet-scale nets are ours across the board**: on all five datasets the
-  C engine fits ~2.3–2.8× faster than torch *and* tensorflow, runs the
-  fastest batch predict, and holds the lowest peak RSS (2.1–3.0× under the
-  frameworks on MNIST). At this scale the frameworks pay per-op dispatch
-  and graph overhead that a thin C core simply doesn't have.
-- **The heavy VGG blocks are now a photo finish**: the first run of this
+  C engine fits ~1.5–2.4× faster than torch *and* tensorflow (torch
+  1.9–2.4×, tensorflow 1.5–2.1× behind), runs the fastest batch predict,
+  and holds the lowest peak RSS (2.3–3.8× under the frameworks on MNIST).
+  At this scale the frameworks pay per-op dispatch and graph overhead that
+  a thin C core simply doesn't have.
+- **The heavy VGG blocks are a photo finish**: the first run of this
   table had TensorFlow's compiled graph 1.3× ahead on minivgg fit and
   1.6× on predict. That gap was recorded as the engine's next target, and
   mantissa v0.2.2 (batch-whole panel-packed GEMM + a NEON 6×16
   micro-kernel, 148 → 363 GFLOP/s on the VGG-block shape) closed it to
-  **8% on fit and 3% on predict** — at 47% less peak memory than
-  TensorFlow. torch's eager mode trails ours 2.1× here. The remainder is
-  Winograd territory, and it is recorded as such.
+  single digits. Re-measured under v0.2.3, TensorFlow leads by **5% on
+  fit and 6% on predict** on CIFAR-10 (5–18% on fit across the five VGG
+  pairs — gaps this small move between runs about as much as between
+  releases) — while ours uses 47% less peak memory than TensorFlow.
+  torch's eager mode trails ours 2.1× here. The remainder is Winograd
+  territory, and it is recorded as such.
 - **Accuracy lands in the same band for everyone** on each pair — same
   structure, same budget, different init/shuffle streams (seeded per
   framework; they cannot be made bit-identical across libraries). Nobody
@@ -238,8 +242,8 @@ framework's defaults and recorded in the JSON. All raw samples live in
 `bench/results/` (regenerable, gitignored).
 
 **Environment.** Apple M4 · Python 3.9.6 · numpy 2.0.2 · torch 2.8.0 ·
-tensorflow 2.20.0 · mantissa 0.2.2 (f32 CNN primitives, conv-GEMM release) ·
-2026-07-13.
+tensorflow 2.20.0 · mantissa 0.2.3 (f32 CNN primitives, audit release) ·
+2026-07-14.
 Reproduce: `python -m bench.speed && python -m bench.accuracy && python -m
 bench.plots`.
 <!-- END:BENCH -->
