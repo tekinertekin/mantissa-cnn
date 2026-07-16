@@ -68,7 +68,7 @@ warnings.filterwarnings("ignore", message=".*encountered in matmul",
 
 # --- protocol (fixed) --------------------------------------------------------
 ARCHITECTURES = ("lenet5", "minivgg")
-DATASETS = ("mnist", "fashion_mnist", "kmnist", "cifar10", "qmnist")
+DATASETS = ("mnist", "fashion_mnist", "kmnist", "cifar10", "qmnist", "atlas_calo")
 N_TRAIN = 2000
 N_TEST = 1000
 EPOCHS = 3
