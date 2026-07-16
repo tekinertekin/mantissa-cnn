@@ -25,7 +25,7 @@ def __getattr__(name):
         return importlib.import_module(".datasets", __name__)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["Sequential", "Conv2D", "MaxPool2D", "Flatten", "Dense",
            "models", "datasets", "cnn_engine", "load_mantissa",
            "MANTISSA_PIP_NAME", "MANTISSA_MIN_VERSION"]
