@@ -13,10 +13,13 @@ environment variable. The directory is gitignored — datasets are never
 committed.
 
 ``load(name)`` -> (X_train, y_train, X_test, y_test): X is NCHW float32
-scaled to [0, 1]; y is int32 class ids 0..9. IDX files are parsed with numpy
-and verified (magic number, dtype code, dimension consistency); CIFAR-10 is
-read straight out of its tar.gz (pickle batches, encoding='bytes' — the
-canonical loader from the dataset page), no extraction step.
+scaled to [0, 1]; y is int32 class ids (0..9 for the ten-class image sets,
+0/1 for the two-class ``atlas_calo`` showers). IDX files are parsed with
+numpy and verified (magic number, dtype code, dimension consistency);
+CIFAR-10 is read straight out of its tar.gz (pickle batches,
+encoding='bytes' — the canonical loader from the dataset page), no
+extraction step; ``atlas_calo`` reads a compact voxel cache produced at
+download time (see below).
 
 | name          | train/test    | shape       | source |
 |---------------|---------------|-------------|--------|
@@ -25,12 +28,20 @@ canonical loader from the dataset page), no extraction step.
 | kmnist        | 60000 / 10000 | (1, 28, 28) | Clanuwat et al. (2018), CODH codh.rois.ac.jp/kmnist |
 | qmnist        | 60000 / 60000 | (1, 28, 28) | Yadav & Bottou (2019), facebookresearch/qmnist (test = extended 60k) |
 | cifar10       | 50000 / 10000 | (3, 32, 32) | Krizhevsky (2009), cs.toronto.edu/~kriz |
+| atlas_calo    | ~190k / ~48k  | (1, 24, 24) | ATLAS Collab. (2021), opendata.cern.ch record 15012, CC0 |
+
+``atlas_calo`` is a CERN Open Data set: voxelised electromagnetic (photon,
+class 0) versus hadronic (charged-pion, class 1) calorimeter showers from the
+ATLAS FastCaloSim GAN training samples (SIMU-2018-04). See the extended note
+above ``_ATLAS_CALO_LAYERS`` for the physics, the voxel geometry, and the
+shower-image construction (azimuthally averaged layer x radius energy map).
 
 All URLs verified fetchable 2026-07.
 """
 from __future__ import annotations
 
 import gzip
+import io
 import os
 import pickle
 import sys
@@ -75,6 +86,13 @@ DATASETS = {
         "https://www.cs.toronto.edu/~kriz/",
         ("cifar-10-python.tar.gz",),
         "32x32 color images, 10 classes (Krizhevsky, 2009)"),
+    "atlas_calo": _Spec(
+        "https://opendata.cern.ch/record/15012/files/",
+        # Files load() reads: the compact voxel cache the downloader builds
+        # from the remote .tgz-of-CSV samples (see _download_atlas_calo).
+        ("photon_voxels.npy", "pion_voxels.npy"),
+        "ATLAS calorimeter showers, photon vs pion, 2 classes "
+        "(ATLAS Collab., 2021; opendata.cern.ch record 15012, CC0)"),
 }
 
 
@@ -149,6 +167,223 @@ def _to_f01(X):
     return np.ascontiguousarray(X.astype(np.float32) / 255.0)
 
 
+# -- atlas_calo: ATLAS calorimeter shower images (CERN Open Data 15012) --------
+#
+# Physics. The ATLAS calorimeter measures particle energy by sampling the
+# shower a particle develops as it stops in the detector. A photon showers
+# electromagnetically — a compact cascade that deposits its energy in the
+# first few (electromagnetic) sampling layers. A charged pion showers
+# hadronically — a broader cascade that punches deeper, into the later
+# (hadronic) layers. Telling the two apart from shower shape is a real ATLAS
+# task; here it is a two-class image problem a CNN is well suited to.
+#
+# Source. Record 15012, "Datasets used to train the Generative Adversarial
+# Networks used in ATLFast3" (ATLAS Collaboration, 2021), CC0, DOI
+# 10.7483/OPENDATA.ATLAS.UXKX.TXBN. Physics: Aad et al. (ATLAS Collab.),
+# "AtlFast3: the next generation of fast simulation in ATLAS", Comput.
+# Softw. Big Sci. 6, 7 (2022), arXiv:2109.02551. Each event is a single
+# particle (photon or pion) simulated in |eta| in [0.20, 0.25]; its energy
+# deposits are converted to local cylindrical coordinates (r, alpha) around
+# the particle direction and binned into voxels per calorimeter layer. The
+# per-voxel energies (MeV) are stored one event per CSV row; the two `small`
+# subsets used here (photon_samples.tgz, pion_samples.tgz) span 15 discrete
+# energy points from 256 MeV to 4.2 TeV, ~118k photon and ~120k pion events.
+# The voxel layout below is transcribed from the record's binning.xml.
+#
+# Image. The CSV is flat, but the voxels carry 2-D spatial structure. We
+# average over the azimuth alpha (showers are ~azimuthally symmetric on
+# average; the discriminating structure is longitudinal and radial) to get,
+# per layer, an energy-vs-radius profile, then regrid every layer's native
+# radial bins onto one common geometric radius axis. The result is a
+# (layer x radius) energy map: rows are the 24 calorimeter sampling layers
+# (depth), columns are common radial bins (lateral spread). Photons light
+# the top (EM) rows; pions also light the deep (hadronic) rows. Energies are
+# clipped at zero (a few 1e-4 of voxels are slightly negative from noise
+# subtraction) and log1p-compressed to [0, 1]. One channel: this record
+# stores energy only (unlike the CMS ECAL image sets, which add a timing
+# channel), and a fabricated second channel would be dishonest.
+#
+# Storage. The downloader parses the CSV samples once into a compact float32
+# voxel cache (photon_voxels.npy, pion_voxels.npy) that load()/subset()
+# memory-map; the raw voxels are kept (not the expanded images), so subset()
+# reads only the rows it selects and builds images for just those — the same
+# uint8-first discipline the IDX/CIFAR paths use, adapted to float voxels.
+
+_ATLAS_CALO_LAYERS = {
+    # pid: [(layer_id, r_edges, n_bin_alpha), ...] for layers with >=1 voxel,
+    # in the CSV's concatenation order (ascending layer id). From binning.xml.
+    22: [   # photon (368 voxels: 8 + 16*10 + 19*10 + 5 + 5)
+        (0, (0, 5, 10, 30, 50, 100, 200, 400, 600), 1),
+        (1, (0, 2, 4, 6, 8, 10, 12, 15, 20, 30, 40, 50, 70, 90, 120, 150, 200), 10),
+        (2, (0, 2, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 130, 160, 200,
+             250, 300, 350, 400), 10),
+        (3, (0, 50, 100, 200, 400, 600), 1),
+        (12, (0, 100, 200, 400, 1000, 2000), 1),
+    ],
+    211: [  # charged pion (533 voxels: 8 + 10*10 + 10*10 + 5 + 15*10 + 16*10 + 10)
+        (0, (0, 5, 10, 30, 50, 100, 200, 400, 600), 1),
+        (1, (0, 1, 4, 7, 10, 15, 30, 50, 90, 150, 200), 10),
+        (2, (0, 5, 10, 20, 30, 50, 80, 130, 200, 300, 400), 10),
+        (3, (0, 50, 100, 200, 400, 600), 1),
+        (12, (0, 10, 20, 30, 50, 80, 100, 130, 160, 200, 250, 300, 350, 400,
+              1000, 2000), 10),
+        (13, (0, 10, 20, 30, 50, 80, 100, 130, 160, 200, 250, 300, 350, 400,
+              600, 1000, 2000), 10),
+        (14, (0, 50, 100, 150, 200, 250, 300, 400, 600, 1000, 2000), 1),
+    ],
+}
+_ATLAS_CALO_CLASS_PID = (22, 211)          # class 0 = photon, class 1 = pion
+_ATLAS_CALO_NCOLS = {pid: sum((len(e) - 1) * na for _, e, na in layers)
+                     for pid, layers in _ATLAS_CALO_LAYERS.items()}   # {22:368, 211:533}
+_ATLAS_CALO_NLAYERS = 24                    # rows: all ATLAS calo sampling layers
+_ATLAS_CALO_NR = 24                         # columns: common radial bins
+_ATLAS_CALO_R_EDGES = np.geomspace(1.0, 1600.0, _ATLAS_CALO_NR + 1)
+_ATLAS_CALO_LOG_SCALE = 16.0                # ~log1p of the largest voxel energy
+_ATLAS_CALO_TEST_FRACTION = 0.2
+_ATLAS_CALO_SPLIT_SEED = 20180              # from the SIMU-2018-04 sample id
+_ATLAS_CALO_REMOTE = (("photon_voxels.npy", "photon_samples.tgz", 22),
+                      ("pion_voxels.npy", "pion_samples.tgz", 211))
+
+
+def _atlas_calo_images(voxels, pid):
+    """(n, ncols) float32 voxel energies -> (n, 1, 24, 24) float32 shower
+    images in [0, 1]: sum over alpha, regrid radius onto the common axis,
+    clip negatives, log1p-compress. Pure function — the unit tests exercise
+    it directly on fabricated voxels."""
+    voxels = np.asarray(voxels, dtype=np.float32)
+    ncols = _ATLAS_CALO_NCOLS[pid]
+    if voxels.ndim != 2 or voxels.shape[1] != ncols:
+        raise ValueError(f"expected (n, {ncols}) voxels for pid {pid}, "
+                         f"got {voxels.shape}")
+    n = voxels.shape[0]
+    img = np.zeros((n, _ATLAS_CALO_NLAYERS, _ATLAS_CALO_NR), dtype=np.float32)
+    off = 0
+    for lid, r_edges, na in _ATLAS_CALO_LAYERS[pid]:
+        nr = len(r_edges) - 1
+        # CSV is alpha-major within a layer (index = alpha * nr + r), verified
+        # against the data; reshape to (n, alpha, r) and sum the azimuth away.
+        radial = voxels[:, off:off + nr * na].reshape(n, na, nr).sum(axis=1)
+        centers = 0.5 * (np.asarray(r_edges[:-1]) + np.asarray(r_edges[1:]))
+        cols = np.clip(np.digitize(centers, _ATLAS_CALO_R_EDGES) - 1,
+                       0, _ATLAS_CALO_NR - 1)
+        for ri in range(nr):
+            img[:, lid, cols[ri]] += radial[:, ri]
+        off += nr * na
+    np.clip(img, 0.0, None, out=img)
+    np.log1p(img, out=img)
+    img /= _ATLAS_CALO_LOG_SCALE
+    np.clip(img, 0.0, 1.0, out=img)
+    return np.ascontiguousarray(
+        img.reshape(n, 1, _ATLAS_CALO_NLAYERS, _ATLAS_CALO_NR))
+
+
+def _atlas_calo_split(n, class_index):
+    """Deterministic per-class (train_rows, test_rows) index arrays into the
+    class .npy — a fixed-seed shuffle then an 80/20 cut. Reproducible across
+    processes and independent of any subset() seed."""
+    rng = np.random.default_rng(_ATLAS_CALO_SPLIT_SEED + class_index)
+    perm = rng.permutation(n)
+    n_test = int(round(n * _ATLAS_CALO_TEST_FRACTION))
+    return perm[n_test:], perm[:n_test]
+
+
+def _atlas_calo_mmaps():
+    d = data_dir() / "atlas_calo"
+    paths = [d / f for f in DATASETS["atlas_calo"].files]
+    if not all(p.is_file() for p in paths):
+        raise FileNotFoundError(
+            "dataset 'atlas_calo' not downloaded — run: "
+            + download_command("atlas_calo"))
+    return [np.load(p, mmap_mode="r") for p in paths]
+
+
+def _atlas_calo_load(subset_ns=None, seed=0):
+    """load()/subset() core for atlas_calo. subset_ns=None -> the full split;
+    (n_train, n_test) -> seeded stratified subsets. Builds images only for the
+    rows it returns (memory-mapped voxel reads)."""
+    mm = _atlas_calo_mmaps()
+    splits = [_atlas_calo_split(mm[c].shape[0], c) for c in range(2)]
+
+    def gather(which, take):
+        pools = [splits[c][which] for c in range(2)]
+        if take is None:
+            sel = pools
+        else:
+            base, extra = divmod(take, 2)      # class 0 gets the odd sample
+            counts = [base + (1 if c < extra else 0) for c in range(2)]
+            rng = np.random.default_rng(seed + which)
+            sel = []
+            for c in range(2):
+                if counts[c] > len(pools[c]):
+                    raise ValueError(f"class {c} has only {len(pools[c])} "
+                                     f"samples, need {counts[c]}")
+                sel.append(rng.permutation(pools[c])[:counts[c]])
+        Xs, ys = [], []
+        for c in range(2):
+            rows = np.sort(np.asarray(sel[c]))           # sorted mmap read
+            vox = np.asarray(mm[c][rows])
+            Xs.append(_atlas_calo_images(vox, _ATLAS_CALO_CLASS_PID[c]))
+            ys.append(np.full(len(rows), c, dtype=np.int32))
+        X = np.concatenate(Xs)
+        y = np.concatenate(ys)
+        # Deterministic shuffle so the two class blocks are interleaved.
+        p = np.random.default_rng(1000 * (seed + 1) + which).permutation(len(y))
+        return np.ascontiguousarray(X[p]), y[p]
+
+    if subset_ns is None:
+        Xtr, ytr = gather(0, None)
+        Xte, yte = gather(1, None)
+    else:
+        Xtr, ytr = gather(0, subset_ns[0])
+        Xte, yte = gather(1, subset_ns[1])
+    return Xtr, ytr, Xte, yte
+
+
+def _download_atlas_calo(d) -> None:
+    """Fetch the record's photon/pion .tgz samples, verify each (announced
+    length, gzip magic), parse the CSV voxel rows, and write a compact
+    float32 voxel cache atomically. The raw .tgz is not kept — the cache is
+    what load() reads."""
+    d.mkdir(parents=True, exist_ok=True)
+    base = DATASETS["atlas_calo"].base_url
+    for out_name, tgz_name, pid in _ATLAS_CALO_REMOTE:
+        out = d / out_name
+        if out.is_file():
+            print(f"atlas_calo: {out_name} already present")
+            continue
+        url = base + tgz_name
+        print(f"atlas_calo: {url}\n  -> {out} (parsing voxels)")
+        with urllib.request.urlopen(url, timeout=180) as r:
+            length = r.headers.get("Content-Length")
+            body = r.read()
+        if length is not None and len(body) != int(length):
+            raise OSError(f"{url}: truncated — got {len(body):,} of "
+                          f"{int(length):,} announced bytes")
+        if not body.startswith(b"\x1f\x8b"):
+            raise OSError(f"{url}: not gzip data (starts {body[:4]!r}) — "
+                          f"an error page or proxy response, not the dataset")
+        ncols = _ATLAS_CALO_NCOLS[pid]
+        rows = []
+        with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as tar:
+            members = [m for m in tar.getmembers() if m.name.endswith(".csv")]
+            if not members:
+                raise OSError(f"{url}: no CSV members in archive")
+            for m in sorted(members, key=lambda m: m.name):
+                arr = np.loadtxt(tar.extractfile(m), delimiter=",",
+                                 dtype=np.float32)
+                if arr.ndim == 1:
+                    arr = arr[None, :]
+                if arr.shape[1] != ncols:
+                    raise OSError(f"{url}:{m.name}: expected {ncols} columns, "
+                                  f"got {arr.shape[1]}")
+                rows.append(arr)
+        vox = np.concatenate(rows)
+        tmp = d / ("." + out_name + ".part.npy")
+        np.save(tmp, vox)
+        tmp.replace(out)
+        print(f"  done ({vox.shape[0]:,} events, {vox.nbytes:,} bytes cached)")
+
+
 # -- public API ---------------------------------------------------------------
 
 def load(name: str):
@@ -161,6 +396,8 @@ def load(name: str):
     """
     if name not in DATASETS:
         raise KeyError(f"unknown dataset {name!r}; available: {', '.join(DATASETS)}")
+    if name == "atlas_calo":
+        return _atlas_calo_load()
     spec = DATASETS[name]
     d = data_dir() / name
     paths = [d / f for f in spec.files]
@@ -204,7 +441,12 @@ def subset(name: str, n_train: int, n_test: int, seed: int = 0):
     remainder split of n over the classes present). The benchmark protocol
     uses subset("...", 2000, 1000, seed=0). Slices the raw uint8 arrays and
     converts only the slice to float32 — same values as slicing load()'s
-    output, at a fraction of the peak RAM (see _load_u8)."""
+    output, at a fraction of the peak RAM (see _load_u8).
+
+    atlas_calo has no uint8 form; its subset reads only the selected voxel
+    rows (memory-mapped) and builds shower images for just those."""
+    if name == "atlas_calo":
+        return _atlas_calo_load((n_train, n_test), seed)
     Xtr, ytr, Xte, yte = _load_u8(name)
     itr = _stratified_indices(ytr, n_train, np.random.default_rng(seed))
     ite = _stratified_indices(yte, n_test, np.random.default_rng(seed + 1))
@@ -237,8 +479,11 @@ def download(name: str) -> None:
     is written to a ``.part`` file and renamed into place, so ``load()``
     never sees a partial download.
     """
-    spec = DATASETS[name]
     d = data_dir() / name
+    if name == "atlas_calo":
+        _download_atlas_calo(d)
+        return
+    spec = DATASETS[name]
     d.mkdir(parents=True, exist_ok=True)
     for fname in spec.files:
         path = d / fname
