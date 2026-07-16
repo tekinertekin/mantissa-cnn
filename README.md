@@ -145,30 +145,60 @@ here with attribution, unmodified.</sub>
 
 ## Datasets
 
-Five image-classification classics, all 10-class. **Nothing downloads
-implicitly** — `data/` is gitignored and library code never touches the
-network; missing files raise with the exact fix command.
+Five image-classification classics plus one from particle physics.
+**Nothing downloads implicitly** — `data/` is gitignored and library code
+never touches the network; missing files raise with the exact fix command.
 
-| name | train/test | shape | source |
-|------|------------|-------|--------|
-| mnist | 60k / 10k | 1×28×28 | LeCun et al. (1998) |
-| fashion_mnist | 60k / 10k | 1×28×28 | Xiao, Rasul & Vollgraf (2017) |
-| kmnist | 60k / 10k | 1×28×28 | Clanuwat et al. (2018) |
-| qmnist | 60k / 60k | 1×28×28 | Yadav & Bottou (2019) |
-| cifar10 | 50k / 10k | 3×32×32 | Krizhevsky (2009) |
+| name | train/test | shape | classes | source |
+|------|------------|-------|:-------:|--------|
+| mnist | 60k / 10k | 1×28×28 | 10 | LeCun et al. (1998) |
+| fashion_mnist | 60k / 10k | 1×28×28 | 10 | Xiao, Rasul & Vollgraf (2017) |
+| kmnist | 60k / 10k | 1×28×28 | 10 | Clanuwat et al. (2018) |
+| qmnist | 60k / 60k | 1×28×28 | 10 | Yadav & Bottou (2019) |
+| cifar10 | 50k / 10k | 3×32×32 | 10 | Krizhevsky (2009) |
+| atlas_calo | ~190k / ~48k | 1×24×24 | 2 | ATLAS Collab. (2021) — [CERN Open Data 15012](https://opendata.cern.ch/record/15012), CC0, [DOI](https://doi.org/10.7483/OPENDATA.ATLAS.UXKX.TXBN) |
 
 One test sample from each, with a LeNet-5's output under it (3-epoch
 protocol budget; correctly-classified examples — the *measured* accuracy
 per dataset is in [Results](#results)):
 
-| mnist | fashion_mnist | kmnist | cifar10 | qmnist |
-|:-----:|:-------------:|:------:|:-------:|:------:|
-| ![mnist sample](assets/samples/mnist.png) | ![fashion sample](assets/samples/fashion_mnist.png) | ![kmnist sample](assets/samples/kmnist.png) | ![cifar10 sample](assets/samples/cifar10.png) | ![qmnist sample](assets/samples/qmnist.png) |
-| → “4” | → “t-shirt” | → “na” (な) | → “airplane” | → “2” |
+| mnist | fashion_mnist | kmnist | cifar10 | qmnist | atlas_calo |
+|:-----:|:-------------:|:------:|:-------:|:------:|:----------:|
+| ![mnist sample](assets/samples/mnist.png) | ![fashion sample](assets/samples/fashion_mnist.png) | ![kmnist sample](assets/samples/kmnist.png) | ![cifar10 sample](assets/samples/cifar10.png) | ![qmnist sample](assets/samples/qmnist.png) | ![atlas_calo sample](assets/samples/atlas_calo.png) |
+| → “4” | → “t-shirt” | → “na” (な) | → “airplane” | → “2” | → “photon” |
 
-`datasets.load(name)` → `(X_train, y_train, X_test, y_test)`, NCHW float32
-in [0, 1], int32 labels. `datasets.subset(name, n_train, n_test, seed)`
-gives seeded stratified subsets (the benchmark protocol uses 2000/1000).
+The last is not a photo: it is a calorimeter shower rendered as a
+`(depth × radius)` energy map — see below. `datasets.load(name)` →
+`(X_train, y_train, X_test, y_test)`, NCHW float32 in [0, 1], int32 labels.
+`datasets.subset(name, n_train, n_test, seed)` gives seeded stratified
+subsets (the benchmark protocol uses 2000/1000).
+
+### A CERN dataset in the zoo
+
+`atlas_calo` is real detector physics, from the [CERN Open Data
+Portal](https://opendata.cern.ch/record/15012) (record 15012, CC0). When a
+particle from an LHC collision enters the ATLAS calorimeter it *showers* — it
+splits into a cascade of secondary particles that deposits its energy across
+the calorimeter's ~24 concentric sampling layers. **How** it showers betrays
+**what** it is: a **photon** showers electromagnetically, a compact cascade
+that dumps its energy in the first few layers; a **charged pion** showers
+hadronically, a broader cascade that punches deep into the later layers.
+Telling the two apart from shower shape is a genuine ATLAS task — here, a
+two-class image problem.
+
+The record ships each shower as a flat list of per-voxel energies (the ATLAS
+[AtlFast3](https://arxiv.org/abs/2109.02551) fast-simulation GAN training
+samples — Aad et al., *Comput. Softw. Big Sci.* **6**, 7, 2022). But the
+voxels are spatial: each has a radius `r` and azimuth `α` within its layer.
+The loader averages over `α` (showers are ~azimuthally symmetric) and regrids
+each layer's radial bins onto a common axis, producing a **(24 layer × 24
+radius)** energy map — depth down the rows, lateral spread across the
+columns. Photons light the top (electromagnetic) rows; pions also light the
+deep (hadronic) rows. That is exactly the local, translation-shared spatial
+structure a convolution is built to read — a CNN honestly fits here, not by
+analogy to photographs but because a shower *is* a 2-D pattern of energy. One
+channel: this record stores energy only (the CMS ECAL image sets add a timing
+channel); a fabricated second channel would be dishonest.
 
 ## Results
 
