@@ -264,6 +264,19 @@ convolutional layers, so it cannot run these architectures.
   to float32 before `subset()` sliced it. Loading now stays uint8 until
   after the slice (bit-identical subsets, measured 672 → 195 MB on the
   qmnist worker). Measure, don't assume.
+- **The physics dataset behaves like a dataset, not a gimmick.** On
+  `atlas_calo` (24×24 single-channel shower maps, 2 classes) ours leads
+  both pairs outright: lenet5 fit **0.185 s** vs tensorflow 0.454, vanilla
+  numpy 0.429, torch 0.487 (predict **6.1 ms** vs 9.6–41.6 ms); minivgg
+  fit **1.966 s** vs tensorflow 2.006, torch 3.878, vanilla numpy 6.497
+  (predict **92.6 ms** vs 104.7–341.6 ms) — with the lowest peak RSS on
+  both (99–100 MB vs 256–592 MB for the frameworks; the memory-mapped
+  voxel subset load keeps every worker lean, ours leanest). Test accuracy
+  under the fixed 3-epoch/2000-sample budget is 0.896–0.959 across
+  contenders (ours 0.896 lenet5 / 0.926 minivgg) — well above the 0.5
+  coin-flip and the 0.79 the best single total-hadronic-energy threshold
+  achieves on the same subset, so the nets are reading shower *shape*,
+  not one summary number.
 
 **Fairness caveats.** TF's one-time graph tracing is excluded from fit
 timing (as imports are for everyone); torch runs eager, its default mode.
@@ -274,6 +287,10 @@ framework's defaults and recorded in the JSON. All raw samples live in
 **Environment.** Apple M4 · Python 3.9.6 · numpy 2.0.2 · torch 2.8.0 ·
 tensorflow 2.20.0 · mantissa 0.2.3 (f32 CNN primitives, audit release) ·
 2026-07-14.
+**Protocol note (v0.2.0):** the two `atlas_calo` pairs were added later and
+measured 2026-07-16 — same machine, versions and protocol, different day
+(recorded as `env.atlas_calo_date` in the results JSONs); the five original
+datasets' numbers above are the untouched 2026-07-14 run.
 Reproduce: `python -m bench.speed && python -m bench.accuracy && python -m
 bench.plots`.
 <!-- END:BENCH -->
