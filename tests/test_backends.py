@@ -15,9 +15,9 @@ import mantissa_cnn._engine as eng
 from mantissa_cnn.layers import Conv2D, Dense, Flatten, MaxPool2D
 from mantissa_cnn.model import Sequential
 
-MISSING_MSG = "mantissa is not installed — run: pip install mantissa-nn"
+MISSING_MSG = "mantissa is not installed — run: pip install mantissa-core"
 TOO_OLD_MSG = ("mantissa >= 0.2.1 required for CNN primitives — "
-               "run: pip install --upgrade mantissa-nn")
+               "run: pip install --upgrade mantissa-core")
 
 
 def _engine_ready() -> bool:

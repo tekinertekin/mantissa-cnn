@@ -19,7 +19,7 @@ from pathlib import Path
 
 # The PyPI distribution name for mantissa. Update this one constant (and
 # pyproject.toml) if it changes; nothing else references the pip name.
-MANTISSA_PIP_NAME = "mantissa-nn"
+MANTISSA_PIP_NAME = "mantissa-core"
 
 # CNN primitives (tk_conv2d_forward_f32 et al.) shipped in this engine release.
 MANTISSA_MIN_VERSION = "0.2.1"

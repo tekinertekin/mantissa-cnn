@@ -27,7 +27,7 @@ per-batch allocation.
 pip install mantissa-cnn   # after PyPI publication
 ```
 
-Requires the engine `mantissa-nn >= 0.2.1` (the release that adds the CNN
+Requires the engine `mantissa-core >= 0.2.1` (the release that adds the CNN
 primitives). From a checkout (works today, no PyPI needed): clone this repo
 next to [mantissa](https://github.com/tekinertekin/mantissa), build the
 engine (`make dist` there), then `pip install -e .` here — the package finds
