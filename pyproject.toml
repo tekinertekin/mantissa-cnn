@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mantissa-cnn"
-version = "0.2.0"
+version = "0.2.1"
 description = "A small, honest CNN classifier on the mantissa C engine"
 readme = "README.md"
 requires-python = ">=3.9"
