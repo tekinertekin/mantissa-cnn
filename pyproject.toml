@@ -12,11 +12,11 @@ license = { text = "MIT" }
 authors = [{ name = "Tekin Ertekin" }]
 dependencies = [
     "numpy>=1.20",
-    # Engine: "mantissa-core" >= 0.2.1 (kept in sync with MANTISSA_PIP_NAME in
-    # _engine.py). Uncomment once published to PyPI; until then a hard
-    # dependency would break `pip install -e .`. A sibling mantissa/ checkout
-    # is picked up automatically either way.
-    # "mantissa-core>=0.2.1",
+    # Engine: kept in sync with MANTISSA_PIP_NAME / MANTISSA_MIN_VERSION in
+    # _engine.py. Now published to PyPI, so this is a hard runtime dependency.
+    # A sibling mantissa/ dev checkout is still picked up automatically when
+    # present (see _engine.load_mantissa).
+    "mantissa-core>=0.2.1",
 ]
 
 [project.optional-dependencies]
