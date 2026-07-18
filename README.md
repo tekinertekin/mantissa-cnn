@@ -24,7 +24,7 @@ per-batch allocation.
 ## Install
 
 ```sh
-pip install mantissa-cnn   # after PyPI publication
+pip install mantissa-cnn
 ```
 
 Requires the engine `mantissa-core >= 0.2.1` (the release that adds the CNN
@@ -77,7 +77,7 @@ Document Recognition", *Proc. IEEE*; the mechanism dates to Fukushima's
 neocognitron, 1980). One layer learns many filters; each produces its own
 output map ("channel"):
 
-<img src="assets/concepts/correlation.svg" width="340" alt="a 2x2 kernel sliding over a 3x3 input producing a 2x2 output">
+<img src="https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/concepts/correlation.svg" width="340" alt="a 2x2 kernel sliding over a 3x3 input producing a 2x2 output">
 
 **Padding.** Each pass of a filter shrinks the image (a 5×5 filter turns
 28×28 into 24×24) and reads border pixels fewer times than central ones.
@@ -88,7 +88,7 @@ survives deep stacks. The full input/output-size arithmetic is worked out
 in Dumoulin & Visin (2016), "A guide to convolution arithmetic for deep
 learning", arXiv:1603.07285:
 
-<img src="assets/concepts/conv-pad.svg" width="340" alt="zero padding around an input before convolving">
+<img src="https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/concepts/conv-pad.svg" width="340" alt="zero padding around an input before convolving">
 
 **Max pooling.** Between convolutions, a pooling layer slides a small
 window (here 2×2) and keeps only the largest value in it — the image
@@ -99,7 +99,7 @@ comparison of Scherer, Müller & Behnke (2010, "Evaluation of Pooling
 Operations in Convolutional Architectures for Object Recognition",
 *ICANN*):
 
-<img src="assets/concepts/pooling.svg" width="300" alt="2x2 max pooling keeping the largest value per window">
+<img src="https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/concepts/pooling.svg" width="300" alt="2x2 max pooling keeping the largest value per window">
 
 Stack these — convolve, pool, convolve, pool, then a couple of dense
 layers — and you have every model in the zoo below.
@@ -126,17 +126,17 @@ scale — see the honest-name notes above):
 
 **LeNet-5** (LeCun et al., 1998) — `lenet5` keeps these exact C1..F6 shapes:
 
-![LeNet-5 architecture](assets/arch/lenet5.svg)
+![LeNet-5 architecture](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/arch/lenet5.svg)
 
 **AlexNet** (Krizhevsky et al., 2012) vs LeNet — `alexnet_small` keeps the
 conv-conv-conv stack and the big dense head, at 32×32:
 
-![AlexNet architecture](assets/arch/alexnet.svg)
+![AlexNet architecture](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/arch/alexnet.svg)
 
 **VGG** (Simonyan & Zisserman, 2015) — `minivgg` keeps the same-width 3×3
 conv *blocks* with pooling between, two blocks instead of five:
 
-![VGG block architecture](assets/arch/vgg.svg)
+![VGG block architecture](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/arch/vgg.svg)
 
 <sub>Diagrams by Zhang, Lipton, Li & Smola, [*Dive into Deep Learning*](https://d2l.ai)
 (LeNet-5 and AlexNet via Wikimedia Commons), licensed
@@ -164,7 +164,7 @@ per dataset is in [Results](#results)):
 
 | mnist | fashion_mnist | kmnist | cifar10 | qmnist | atlas_calo |
 |:-----:|:-------------:|:------:|:-------:|:------:|:----------:|
-| ![mnist sample](assets/samples/mnist.png) | ![fashion sample](assets/samples/fashion_mnist.png) | ![kmnist sample](assets/samples/kmnist.png) | ![cifar10 sample](assets/samples/cifar10.png) | ![qmnist sample](assets/samples/qmnist.png) | ![atlas_calo sample](assets/samples/atlas_calo.png) |
+| ![mnist sample](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/samples/mnist.png) | ![fashion sample](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/samples/fashion_mnist.png) | ![kmnist sample](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/samples/kmnist.png) | ![cifar10 sample](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/samples/cifar10.png) | ![qmnist sample](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/samples/qmnist.png) | ![atlas_calo sample](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/samples/atlas_calo.png) |
 | → “4” | → “t-shirt” | → “na” (な) | → “airplane” | → “2” | → “photon” |
 
 The last is not a photo: it is a calorimeter shower rendered as a
@@ -231,9 +231,9 @@ convolutional layers, so it cannot run these architectures.
 | torch | 6.789 | 256.6 | 655 | 0.288 |
 | vanilla numpy | 9.696 | 608.5 | 572 | 0.294 |
 
-![median fit time per architecture/dataset per contender](assets/fit_time.png)
-![test accuracy per architecture/dataset](assets/accuracy.png)
-![peak RSS per contender](assets/peak_rss.png)
+![median fit time per architecture/dataset per contender](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/fit_time.png)
+![test accuracy per architecture/dataset](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/accuracy.png)
+![peak RSS per contender](https://raw.githubusercontent.com/tekinertekin/mantissa-cnn/main/assets/peak_rss.png)
 
 **The honest read.**
 - **LeNet-scale nets are ours across the board**: on all five datasets the
