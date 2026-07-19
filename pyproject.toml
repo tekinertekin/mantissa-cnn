@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mantissa-cnn"
-version = "0.2.1"
+version = "0.2.2"
 description = "A small, honest CNN classifier on the mantissa C engine"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -12,8 +12,13 @@ license = { text = "MIT" }
 authors = [{ name = "Tekin Ertekin" }]
 dependencies = [
     "numpy>=1.20",
+    # Shared base: Dense/Flatten layers, the numpy reference backend and the
+    # image datasets now live in mantissa-nn (re-exported here so the public
+    # mantissa_cnn API is unchanged). For the dev layout, `pip install -e ../mantissa-nn`.
+    "mantissa-nn>=0.1.0",
     # Engine: kept in sync with MANTISSA_PIP_NAME / MANTISSA_MIN_VERSION in
     # _engine.py. Now published to PyPI, so this is a hard runtime dependency.
+    # (mantissa-nn also requires it; pinned explicitly here for the CNN gate.)
     # A sibling mantissa/ dev checkout is still picked up automatically when
     # present (see _engine.load_mantissa).
     "mantissa-core>=0.2.1",
